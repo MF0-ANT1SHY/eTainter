@@ -156,6 +156,7 @@ def analysis(p, initial_storage=dict(),
                         if defect_type not in (['Unbounded-Loop','DoS-With-Failed-Call']):                                               
                             logging.info("{0} at statment {1} in function: {2}".format(user_alerts[i_r.defect_type], i, cinfo.get_function_sig(p, i_path)))                            
                             logging.info("------------------\n")                     
+                            analysis_results.checked_sinks.append(i)  
                     elif defect_type in (['Gas-Griefing']) and len([v for i in i_r.sources for k, v in i.items() if not k.startswith('SLOAD')])!=0:
                         griefing_count+=1
                         logging.info("{0} at statment {1} in function: {2}".format(user_alerts[i_r.defect_type], i, cinfo.get_function_sig(p, i_path)))
@@ -298,3 +299,4 @@ def main():
                 
 if __name__ == '__main__':    
     main()
+    logging.info("Analysis completed.")
