@@ -76,7 +76,8 @@ def analysis(p, initial_storage=dict(),
                    'DoS-With-Failed-Call': 'DoS-With-Failed-Call', \
                    'SELFDESTRUCT':'Controlable Address of SELFDESTRUCT'}     
     flags = flags or set(opcodes.CRITICAL)    
-    tainting_type='storage'  
+    tainting_type='storage'
+    logging.info("Converting to SSA and performing taint analysis ...")  
     ##convert_to_ssa
     sys.setrecursionlimit(10000)
     ssa = rattle.Recover(bytes.hex(p.code).encode(), edges=p.cfg.edges(), split_functions=False)    
@@ -286,6 +287,7 @@ def main():
                 json.dump(p.to_json(), f)                                  
             analysis(p, initial_storage=initial_storage)            
     else:
+        logging.info("Processing EVM bytecode ...")
         with open(args.file)  as infile:
             inbuffer = infile.read().rstrip()            
         code = bytes.fromhex(inbuffer)
