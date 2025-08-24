@@ -19,8 +19,8 @@ from src.flow.analysis_results import TainitAnalysisBugDetails
 import src.flow.code_info as cinfo
 import src.flow.analysis_results as analysis_results
 
-logging.basicConfig(level=logging.INFO)
-
+# logging.basicConfig(level=logging.INFO,stream=sys.err, format=)
+from src.util.logger import logger as logging
 
 def hex_encode(d):
     return {k: v.hex() if isinstance(v, bytes) else v for k, v in d.items()}
@@ -37,9 +37,9 @@ def extract_bin_str(s):
     
     if not contracts:
         logging.critical("Solidity compilation failed")
-        print ("======= error =======")
-        print ("Solidity compilation failed")
-        print ("Check the used solc compiler version")
+        logging.info ("======= error =======")
+        logging.info ("Solidity compilation failed")
+        logging.info ("Check the used solc compiler version")
         exit()
     return contracts
 
@@ -73,7 +73,8 @@ def analysis(p, initial_storage=dict(),
                      max_calls=3, controlled_addrs=set(), flags=None):
 
     user_alerts = {'Unbounded-Loop':'Unbounded loop condition', \
-                   'DoS-With-Failed-Call': 'DoS-With-Failed-Call'}     
+                   'DoS-With-Failed-Call': 'DoS-With-Failed-Call', \
+                   'SELFDESTRUCT':'Controlable Address of SELFDESTRUCT'}     
     flags = flags or set(opcodes.CRITICAL)    
     tainting_type='storage'  
     ##convert_to_ssa
@@ -89,9 +90,9 @@ def analysis(p, initial_storage=dict(),
     temp_slots_count = 0
     slot_live_access_count = 0
     
-    for defect_type in list(['Unbounded-Loop','DoS-With-Failed-Call']):
-        print("Checking contract for \033[4m{0}\033[0m ".format(defect_type))
-        print("------------------\n")            
+    for defect_type in list(['SELFDESTRUCT']):
+        logging.info("Checking contract for \033[4m{0}\033[0m ".format(defect_type))
+        logging.info("------------------\n")            
         ins=[]
         taintedBy = []
         
@@ -107,7 +108,10 @@ def analysis(p, initial_storage=dict(),
             for loop, heads in loops.items():
                 for h in set(heads):
                     ins.append(h)
-            restricted=True           
+            restricted=True
+        elif defect_type == 'SELFDESTRUCT':
+            ins = p.cfg.filter_ins('SELFDESTRUCT', reachable=True)   
+            restricted=True        
         else:
             ins = []
         if not ins:        
@@ -149,12 +153,12 @@ def analysis(p, initial_storage=dict(),
                         elif defect_type in (['Hardcoded-Gas']):
                             harcoded_count+=1
                         if defect_type not in (['Unbounded-Loop','DoS-With-Failed-Call']):                                               
-                            print("{0} at statment {1} in function: {2}".format(user_alerts[i_r.defect_type], i, cinfo.get_function_sig(p, i_path)))                            
-                            print("------------------\n")                     
+                            logging.info("{0} at statment {1} in function: {2}".format(user_alerts[i_r.defect_type], i, cinfo.get_function_sig(p, i_path)))                            
+                            logging.info("------------------\n")                     
                     elif defect_type in (['Gas-Griefing']) and len([v for i in i_r.sources for k, v in i.items() if not k.startswith('SLOAD')])!=0:
                         griefing_count+=1
-                        print("{0} at statment {1} in function: {2}".format(user_alerts[i_r.defect_type], i, cinfo.get_function_sig(p, i_path)))
-                        print("------------------\n")                        
+                        logging.info("{0} at statment {1} in function: {2}".format(user_alerts[i_r.defect_type], i, cinfo.get_function_sig(p, i_path)))
+                        logging.info("------------------\n")                        
                     else:                                                        
                         sstores = p.cfg.filter_ins('SSTORE', reachable=True)                                                                                          
                         sstore_sinks={s.addr:[1] for s in sstores}  
@@ -174,8 +178,8 @@ def analysis(p, initial_storage=dict(),
                                 elif defect_type in (['Hardcoded-Gas']):
                                     harcoded_count+=1                                    
                                 if defect_type not in (['Unbounded-Loop','DoS-With-Failed-Call']):                                               
-                                    print("{0} at statment {1} in function: {2}".format(user_alerts[i_r.defect_type], i, cinfo.get_function_sig(p, i_path)))
-                                    print("------------------\n")   
+                                    logging.info("{0} at statment {1} in function: {2}".format(user_alerts[i_r.defect_type], i, cinfo.get_function_sig(p, i_path)))
+                                    logging.info("------------------\n")   
                                 break                  
         if defect_type in (['Unbounded-Loop']):             
             for l, hd in loops.items():             
@@ -185,16 +189,16 @@ def analysis(p, initial_storage=dict(),
                 if len(v_ins)!=0:                                                                
                     if (hd[0]<3 and len(no_storage_tnt)!=0):
                         continue
-                    print("{0} in function: {1}".format(user_alerts[i_r.defect_type], v_ins[0]['function']))                                                                                           
+                    logging.info("{0} in function: {1}".format(user_alerts[i_r.defect_type], v_ins[0]['function']))                                                                                           
                     for v in v_ins:
                         if v['increased_in'] is not None:
                             if v['increase_restricted']:
                                 r+=1
-                                print("Following loop bound is tainted in function {0} (restricted calls)".format(v['increased_in']))                                                                            
+                                logging.info("Following loop bound is tainted in function {0} (restricted calls)".format(v['increased_in']))                                                                            
                             else:
-                                print("Following loop bound is tainted in function {0}".format(v['increased_in']))                                                                            
-                        print(v['ins'])                                                             
-                    print('\n')     
+                                logging.info("Following loop bound is tainted in function {0}".format(v['increased_in']))                                                                            
+                        logging.info(v['ins'])                                                             
+                    logging.info('\n')     
                     if r==0:          
                         unbounded_count+=1
                     else:
@@ -205,12 +209,16 @@ def analysis(p, initial_storage=dict(),
                 v_ins= [b for b in loops_with_calls if b['block'] in set([l])]
                 if len(v_ins)!=0:                             
                     loop_calls_count+=1                                                   
-                    print("{0} in function: {1}".format(user_alerts[i_r.defect_type], v_ins[0]['function']))                                                                       
+                    logging.info("{0} in function: {1}".format(user_alerts[i_r.defect_type], v_ins[0]['function']))                                                                       
                     for v in v_ins:
                         if v['increased_in'] is not None:
-                            print("Following call target is tainted in function {0}".format(v['increased_in']))
-                        print(v['ins'])                                       
-                    print('\n')               
+                            logging.info("Following call target is tainted in function {0}".format(v['increased_in']))
+                        logging.info(v['ins'])                                       
+                    logging.info('\n')
+        if defect_type in (['SELFDESTRUCT']):
+            for i in analysis_results.checked_sinks:
+                logging.info("{0} at statment {1} in function: {2}".format(user_alerts[i_r.defect_type], i, cinfo.get_function_sig(p, i_path)))                            
+                logging.info("------------------\n")
     return TainitAnalysisBugDetails(unbounded_count, unbounded_restr_count, loop_calls_count, griefing_count, harcoded_count, asserts_count, slot_live_access_count, temp_slots_count)
 
 def main():
@@ -236,7 +244,7 @@ def main():
     args = parser.parse_args()
     
     if args.file is None:
-        print('Usage: %s  <-f file>  [--memory] [-b] ' % \
+        logging.info('Usage: %s  <-f file>  [--memory] [-b] ' % \
               sys.argv[0], file=sys.stderr)
         exit(-1)
     
@@ -261,7 +269,7 @@ def main():
     if not args.tainting_type:
         tainting_type ='all'    
     elif args.tainting_type not in set(['storage','all']):
-        print('Usage: wrong value for tainting_type. Valid values [''all'',''storage''] ')
+        logging.info('Usage: wrong value for tainting_type. Valid values [''all'',''storage''] ')
         exit(-1)
     else:
         tainting_type ='storage'
@@ -270,8 +278,8 @@ def main():
         contracts = get_evm(args.file)
         # Analyze each contract
         for cname, bin_str in contracts:
-            print("Contract {0}:".format(cname))                    
-            print("------------------\n")            
+            logging.info("Contract {0}:".format(cname))                    
+            logging.info("------------------\n")            
             code = bytes.fromhex(bin_str)            
             p = Project(code)
             with open('%s.project.json' % savefilebase, 'w') as f:
@@ -282,8 +290,8 @@ def main():
             inbuffer = infile.read().rstrip()            
         code = bytes.fromhex(inbuffer)
         p = Project(code)
-        with open('%s.project.json' % savefilebase, 'w') as f:
-            json.dump(p.to_json(), f)                    
+        # with open('%s.project.json' % savefilebase, 'w') as f:
+        #     json.dump(p.to_json(), f)                    
         analysis(p, initial_storage=initial_storage)        
                 
 if __name__ == '__main__':    
