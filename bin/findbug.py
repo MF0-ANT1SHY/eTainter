@@ -76,8 +76,7 @@ def analysis(p, initial_storage=dict(),
                    'DoS-With-Failed-Call': 'DoS-With-Failed-Call', \
                    'SELFDESTRUCT':'Controlable Address of SELFDESTRUCT'}     
     flags = flags or set(opcodes.CRITICAL)    
-    tainting_type='storage'
-    logging.info("Converting to SSA and performing taint analysis ...")  
+    tainting_type='storage'  
     ##convert_to_ssa
     sys.setrecursionlimit(10000)
     ssa = rattle.Recover(bytes.hex(p.code).encode(), edges=p.cfg.edges(), split_functions=False)    
@@ -91,7 +90,7 @@ def analysis(p, initial_storage=dict(),
     temp_slots_count = 0
     slot_live_access_count = 0
     
-    for defect_type in list(['SELFDESTRUCT']):
+    for defect_type in list(['Unbounded-Loop','DoS-With-Failed-Call']):
         logging.info("Checking contract for \033[4m{0}\033[0m ".format(defect_type))
         logging.info("------------------\n")            
         ins=[]
@@ -156,7 +155,6 @@ def analysis(p, initial_storage=dict(),
                         if defect_type not in (['Unbounded-Loop','DoS-With-Failed-Call']):                                               
                             logging.info("{0} at statment {1} in function: {2}".format(user_alerts[i_r.defect_type], i, cinfo.get_function_sig(p, i_path)))                            
                             logging.info("------------------\n")                     
-                            analysis_results.checked_sinks.append(i)  
                     elif defect_type in (['Gas-Griefing']) and len([v for i in i_r.sources for k, v in i.items() if not k.startswith('SLOAD')])!=0:
                         griefing_count+=1
                         logging.info("{0} at statment {1} in function: {2}".format(user_alerts[i_r.defect_type], i, cinfo.get_function_sig(p, i_path)))
@@ -277,26 +275,18 @@ def main():
         tainting_type ='storage'
     
     if not args.bytecode:
-        contracts = get_evm(args.file)
-        # Analyze each contract
-        for cname, bin_str in contracts:
-            logging.info("Contract {0}:".format(cname))                    
-            logging.info("------------------\n")            
-            code = bytes.fromhex(bin_str)            
-            p = Project(code)
-            with open('%s.project.json' % savefilebase, 'w') as f:
-                json.dump(p.to_json(), f)                                  
-            analysis(p, initial_storage=initial_storage)            
+        with open(args.file, 'rb') as f:
+            jd = json.load(f)
+        p = Project.from_json(jd)                                  
+        analysis(p, initial_storage=initial_storage)            
     else:
-        logging.info("Processing EVM bytecode ...")
         with open(args.file)  as infile:
             inbuffer = infile.read().rstrip()            
         code = bytes.fromhex(inbuffer)
         p = Project(code)
-        # with open('%s.project.json' % savefilebase, 'w') as f:
-        #     json.dump(p.to_json(), f)                    
+        with open('%s.project.json' % savefilebase, 'w') as f:
+            json.dump(p.to_json(), f)                    
         analysis(p, initial_storage=initial_storage)        
                 
 if __name__ == '__main__':    
     main()
-    logging.info("Analysis completed.")
